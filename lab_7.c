@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
-#define NUMBER_OF_CLIENTS 20
+#define NUMBER_OF_CLIENTS 2
 #define INITIALS_LEN 50
 #define BANK_PERIOD 5 //srok godnosti v godah
 //name validation???
@@ -35,6 +35,7 @@ struct database
 } typedef database;
 
 database* data_base_init(int);
+database* load_database_from_file();
 bank* find_client_by_fio(const char*, const char*, const char*, database*);
 bank* create_client(database*, date);
 bank* find_client_by_fio(const char*, const char*, const char*, database*);
@@ -43,20 +44,19 @@ int account_expired(int, int);
 int account_warning(int, int);
 int cmp_clients(bank*, const char*, const char*, const char*);
 int check_bank_accounts(bank**, date, database*, int (*)(int, int));
+int find_clients_by_balance(bank**, database*, int);
+int save_database(database*);
 void add_client(database*, date);
 void show_data_base(database* data);
 void find_show_client(database*);
 void free_database(database*);
-void find_clients_by_balance(int, database*, database*);
 void show_find_clients_by_balance(database*);
 void sort_base_by_surname(database*);
 void take_money_from_account(database*);
-void show_expired_bank_accounts(database*, date, int (*)(int, int));
+void show_check_bank_accounts(database*, date, int (*)(int, int));
 void free_client(bank*);
 void menu();
 
-int save_database(database*);
-database* load_database_from_file();
 
 
 int main(){
@@ -202,7 +202,12 @@ database* data_base_init(int capacity){
 }
 
 void show_data_base(database* data){
-    printf("\n----------------data-------------------\n");
+    if (data->len <= 0)
+    {
+        printf("It's empty here\n");
+        return;
+    }
+    printf("\n---------------------------------------data---------------------------------------\n");
     printf("%-10s\t%-15s\t%-10s\t%-15s\t%-15s", "NAME", "SURNAME", "FATHERNAME", 
                                                 "BALANCE","CREATION DATE");
     printf("\n");
@@ -217,7 +222,7 @@ void show_data_base(database* data){
             data->clients[i]->create_date.year
             );
     }
-    printf("---------------------------------------\n");
+    printf("----------------------------------------------------------------------------------\n");
 }   
 
 int cmp_clients(bank* c, const char* n, const char* s, const char* f){
@@ -243,12 +248,14 @@ bank* find_client_by_fio(const char* name, const char* surname, const char* fath
 }   
 
 int account_expired(int date_creation_in_days, int current_date_in_days){
+    printf("Expired accounts!!!\n");
     if(current_date_in_days > (date_creation_in_days + BANK_PERIOD * 365))
         return 1;
     return 0;
 }
 
 int account_warning(int date_creation_in_days, int current_date_in_days){
+    printf("Accounts with warnings!!!\n");
     if(current_date_in_days > (date_creation_in_days + BANK_PERIOD * 365 - 10))
         return 1;
     return 0;
@@ -271,7 +278,7 @@ int check_bank_accounts(bank** res, date current_date, database* data, int (*fun
     return t_res - res;   
 }
 
-void show_expired_bank_accounts(database* data, date current_date, int (*func)(int, int)){
+void show_check_bank_accounts(database* data, date current_date, int (*func)(int, int)){
     database* expired_accounts = malloc(sizeof(database));
     bank** res = calloc(data->len, sizeof(bank*));
 
@@ -331,25 +338,18 @@ void free_client(bank* client){
     free(client);
 }
 
-void find_clients_by_balance(int balance, database* res, database* data){
-    int j = 0;
+int find_clients_by_balance(bank** res, database* data, int balance){
+    bank** t_res = res;  
     for (int i = 0; i < data->len; i++)
     {
-        if (data->clients[i]->sum > balance){
-            res->clients[j] = (bank*) malloc(sizeof(bank));
-            res->clients[j]->person.name = (char*) calloc(INITIALS_LEN, sizeof(char));
-            res->clients[j]->person.surname = (char*) calloc(INITIALS_LEN, sizeof(char));
-            res->clients[j]->person.fathername = (char*) calloc(INITIALS_LEN, sizeof(char));
-
-            strcpy(res->clients[j]->person.name, data->clients[i]->person.name);
-            strcpy(res->clients[j]->person.surname, data->clients[i]->person.surname);
-            strcpy(res->clients[j++]->person.fathername, data->clients[i]->person.fathername);
-
-            res->clients[j]->create_date = data->clients[i]->create_date;
-            res->clients[j]->sum = data->clients[i]->sum;
+        date date_creation = data->clients[i]->create_date;
+        if (data->clients[i]->sum > balance)
+        {
+            *t_res = data->clients[i];
+            t_res++;
         }
     }
-    res->len = j;
+    return t_res - res; 
 }
 
 void show_find_clients_by_balance(database* data){
@@ -357,14 +357,20 @@ void show_find_clients_by_balance(database* data){
     printf("\nEnter the balance: \n");
     scanf("%lf", &bal);
 
-    database* res = data_base_init(data->capacity);
+    database* _accounts = malloc(sizeof(database));
+    bank** res = calloc(data->len, sizeof(bank*));
 
-    find_clients_by_balance(bal, res, data);
+    int size = find_clients_by_balance(res, data, bal);
+    res = realloc(res, size);
 
-    res->clients = (bank**) realloc(res->clients, res->len * sizeof(bank*));
+    _accounts->clients = res;
+    _accounts->capacity = data->capacity;
+    _accounts->len = size;
 
-    show_data_base(res);
-    free_database(res);
+    show_data_base(_accounts);
+
+    free(res);
+    free(_accounts);
 }
 
 void sort_base_by_surname(database* data){
@@ -444,8 +450,8 @@ void menu(){
             take_money_from_account(data);
             break; 
         case 7:
-            show_expired_bank_accounts(data, current_date, account_expired);
-            show_expired_bank_accounts(data, current_date, account_warning);
+            show_check_bank_accounts(data, current_date, account_expired);
+            show_check_bank_accounts(data, current_date, account_warning);
             break;       
         default:
             if (choice != 8)
