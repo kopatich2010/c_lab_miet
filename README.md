@@ -1,1 +1,1 @@
-there is some sort of data base of bank clients
+there is some sort of database of bank clients
